@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AI 资金管理助手</title>
+  <style>
+    :root {
+      --primary-color: #EB3223;
+      --primary-light: #FDF2F2;
+      --bg-color: #F7F8FA;
+      --text-main: #1F2D3D;
+      --text-sub: #8A8F99;
+      --card-bg: #FFFFFF;
+      --success-color: #4CAF50;
+      --warning-color: #FF9800;
+      --info-color: #3182CE;
+      --border-color: #EDEFF2;
+      --sidebar-width: 260px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      background: #e5e5e5;
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* 侧边栏 */
+    .sidebar {
+      position: absolute;
+      left: calc(-1 * var(--sidebar-width));
+      top: 0;
+      width: var(--sidebar-width);
+      height: 100%;
+      background: #1a1a1a;
+      color: white;
+      z-index: 1000;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+    }
+    .sidebar.active { transform: translateX(var(--sidebar-width)); }
+
+    .sidebar-header {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid #333;
+      font-size: 18px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .history-list { flex: 1; overflow-y: auto; margin-top: 10px; }
+
+    .history-item {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 14px;
+      color: #ccc;
+    }
+    .history-item:hover, .history-item.active { background: #333; color: white; }
+    .history-item .dot { width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; }
+
+    /* 遮罩层 */
+    .overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+      display: none;
+    }
+    .overlay.active { display: block; }
+
+    .mobile-container {
+      max-width: 430px;
+      width: 100%;
+      height: 100vh;
+      background: var(--bg-color);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 0 40px rgba(0,0,0,0.1);
+    }
+
+    .header {
+      background: white;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+
+    .menu-btn {
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+
+    .nav-bar {
+      flex: 1;
+      padding: 16px 0;
+      text-align: center;
+      font-weight: 700;
+      font-size: 17px;
+      margin-right: 40px;
+    }
+
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .message { display: flex; gap: 10px; margin-bottom: 20px; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .message.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: bold; flex-shrink: 0;
+    }
+    .avatar.ai { background: var(--primary-color); color: white; border: 2px solid #fff; }
+    .avatar.user { background: #CBD5E0; color: white; }
+
+    .bubble {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.6;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .ai .bubble { background: white; border-top-left-radius: 4px; color: #334155; }
+    .user .bubble { background: var(--primary-color); color: white; border-top-right-radius: 4px; }
+
+    .card { background: white; border-radius: 12px; padding: 16px; margin-top: 10px; border: 1px solid var(--border-color); }
+    .card-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+
+    .data-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dotted var(--border-color); }
+    .data-label { color: var(--text-sub); font-size: 13px; }
+    .data-value { font-weight: 600; font-size: 14px; }
+    .data-value.highlight { color: var(--primary-color); }
+
+    .analysis-progress { height: 8px; background: #EDEFF2; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--primary-color); transition: width 0.5s; }
+
+    .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 15px; }
+    .btn { padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; border: none; transition: all 0.2s; }
+    .btn-primary { background: var(--primary-color); color: white; }
+    .btn-secondary { background: var(--primary-light); color: var(--primary-color); }
+    .btn-ghost { background: #F7F8FA; color: var(--text-main); border: 1px solid var(--border-color); }
+
+    .bottom-section { background: white; border-top: 1px solid var(--border-color); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .quick-actions { display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; scrollbar-width: none; }
+    .quick-actions::-webkit-scrollbar { display: none; }
+
+    .action-chip {
+      white-space: nowrap;
+      padding: 8px 16px;
+      background: var(--primary-light);
+      border: 1px solid #FED7D7;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--primary-color);
+      font-weight: 500;
+    }
+
+    .input-bar { padding: 0 16px 12px; display: flex; gap: 10px; align-items: center; }
+    .input-container { flex: 1; background: #F2F3F5; border-radius: 24px; padding: 10px 16px; border: 1px solid transparent; transition: all 0.2s; }
+    .input-container:focus-within { background: white; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(235, 50, 35, 0.1); }
+    .main-input { width: 100%; border: none; background: transparent; outline: none; font-size: 15px; }
+
+    .upload-placeholder { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+    .u-box {
+      aspect-ratio: 1;
+      border: 2px dashed #CBD5E0;
+      border-radius: 10px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 10px; color: var(--text-sub);
+      transition: all 0.2s;
+      cursor: pointer;
+      user-select: none;
+    }
+    .u-box.filled { border-color: var(--success-color); background: #F0FFF4; color: var(--success-color); }
+  </style>
+</head>
+
+<body>
+  <!-- 侧边栏 -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span>📖 历史记录</span>
+    </div>
+
+    <div class="history-list">
+      <div class="history-item active" onclick="resetApp()">
+        <div class="dot"></div>
+        <span>新用户 (首次进入)</span>
+      </div>
+
+      <div class="history-item" onclick="scenarioDueSoon()">
+        <div class="dot" style="background: var(--warning-color);"></div>
+        <span>临期提醒（≤7天）</span>
+      </div>
+
+      <div class="history-item" onclick="scenarioOverdue()">
+        <div class="dot" style="background: var(--primary-color);"></div>
+        <span>逾期提醒（Overdue）</span>
+      </div>
+
+      <!-- ✅ 新增：本月已还清 -->
+      <div class="history-item" onclick="scenarioAllPaid()">
+        <div class="dot" style="background: var(--success-color);"></div>
+        <span>本月已还清</span>
+      </div>
+
+     <div class="history-item" onclick="scenarioShortfall()">
+      <div class="dot" style="background: var(--warning-color);"></div>
+      <span>资金缺口</span>
+     </div>
+    </div>
+
+    <div style="padding: 20px; font-size: 12px; color: #666;">
+      版本: v2.5.0 (AI 内核)
+    </div>
+  </div>
+
+  <!-- 遮罩 -->
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+  <div class="mobile-container">
+    <div class="header">
+      <div class="menu-btn" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </div>
+      <nav class="nav-bar">🤖 AI 资金管理管家</nav>
+    </div>
+
+    <div class="chat-container" id="chatBox"></div>
+
+    <div class="bottom-section">
+      <div class="quick-actions">
+        <button class="action-chip" onclick="flowLoan()">➕ 新增贷款</button>
+        <button class="action-chip" onclick="flowIncome()">💰 录收入</button>
+        <button class="action-chip" onclick="flowExpense()">💸 记支出</button>
+        <button class="action-chip" onclick="flowAnalyze()">📊 深度分析报告</button>
+      </div>
+
+      <div class="input-bar">
+        <div class="input-container">
+          <input
+            type="text"
+            class="main-input"
+            id="userInput"
+            placeholder="例如：刚才吃饭花了30..."
+            onkeypress="if(event.keyCode==13) handleSend()"
+          />
+        </div>
+        <button onclick="handleSend()" style="background:none; border:none; color:var(--primary-color); display:flex;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const chatBox = document.getElementById('chatBox');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('overlay');
+
+  // 统一 userState（避免你原脚本里 income/Income、expense/费用 等大小写混乱）
+  let userState = {
+    loan: 0,
+    income: 0,
+    expense: 0
+  };
+
+  function toggleSidebar() {
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('active');
+  }
+
+  function setActiveHistory(labelText) {
+    document.querySelectorAll('.history-item').forEach(item => item.classList.remove('active'));
+    const target = Array.from(document.querySelectorAll('.history-item span'))
+      .find(s => s.textContent.includes(labelText));
+    if (target) target.closest('.history-item').classList.add('active');
+  }
+
+  function appendMsg(role, content) {
+    const msg = document.createElement('div');
+    msg.className = `message ${role}`;
+    msg.innerHTML = `
+      <div class="avatar ${role}">${role === 'ai' ? 'AI' : '我'}</div>
+      <div class="bubble">${content}</div>
+    `;
+    chatBox.appendChild(msg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return msg;
+  }
+
+  function markUpload(el) {
+    el.classList.add('filled');
+    el.innerHTML = '<span>✅</span>已就绪';
+  }
+
+  // -----------------------------
+  // 入口：新用户（首次进入）
+  // -----------------------------
+  function resetApp() {
+    chatBox.innerHTML = '';
+    userState = { loan: 0, income: 0, expense: 0 };
+    setActiveHistory('新用户');
+
+    appendMsg('ai', `
+      <div>
+        你好！我是你的智能财务助手。我将协助你完成财务健康梳理。<br><br>
+        我们将分三步进行：<br>
+        <strong>1. 识别贷款情况</strong> (第一步)<br>
+        2. 记录月度收入<br>
+        3. 追踪日常支出<br><br>
+        <span style="color: var(--primary-color);"><strong>[步骤 1/3]</strong> 请上传你的贷款额度页或账单页截图：</span>
+      </div>
+    `);
+
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">📱 贷款信息识别</div>
+
+        <select id="p_select" style="width:100%; padding:12px; margin-bottom:12px; border-radius:8px; border:1px solid #ddd; appearance:none; background:#fff; font-size:14px;">
+          <option>Akulaku</option>
+          <option>Kredivo</option>
+          <option>Shopee PayLater</option>
+        </select>
+
+        <div class="upload-placeholder">
+          <div class="u-box" onclick="markUpload(this)"><span>📷</span>额度页</div>
+          <div class="u-box" onclick="markUpload(this)"><span>📷</span>账单页</div>
+          <div class="u-box" onclick="markUpload(this)"><span>📷</span>还款日</div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%" onclick="confirmLoan(this)">开始智能识别</button>
+      </div>
+    `);
+
+    if (sidebar.classList.contains('active')) toggleSidebar();
+  }
+
+  // -----------------------------
+  // 场景：临期提醒（≤7天）
+  // -----------------------------
+  function scenarioDueSoon() {
+    chatBox.innerHTML = '';
+    setActiveHistory('临期提醒');
+
+    // 演示数据
+    userState = { loan: 128450000, income: 10000000, expense: 6000000 };
+
+    appendMsg('ai', `
+      <div>
+        我看到有几笔账单 <strong>即将到还款日期</strong>。<br>
+        建议你优先处理到期更近、成本更高的账单，以减少额外费用。
+      </div>
+    `);
+
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">⏰ 临期账单提醒</div>
+
+        <div class="data-row">
+          <span class="data-label">Akulaku</span>
+          <span class="data-value highlight">3 天后到期</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">应还金额</span>
+          <span class="data-value">Rp 3,500,000</span>
+        </div>
+
+        <div class="data-row" style="margin-top:10px;">
+          <span class="data-label">Kredivo</span>
+          <span class="data-value" style="color: var(--warning-color); font-weight:700;">6 天后到期</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">应还金额</span>
+          <span class="data-value">Rp 1,200,000</span>
+        </div>
+
+        <div style="margin-top:12px; padding:12px; background:#F8F9FA; border-radius:8px; border-left:4px solid var(--warning-color)">
+          <div style="font-size:12px; color:#555; line-height:1.5">
+            小提示：如果你 <strong>提前还款</strong> 或按时处理临期账单，通常能减少额外费用并降低逾期风险。
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="dueSoonActionPay()">我准备处理还款</button>
+          <button class="btn btn-secondary" onclick="dueSoonAskChange()">我近期收支有变化</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','好的。如果你需要我重新排序优先级或生成还款计划，随时点「智能分析」。')">暂时不处理</button>
+        </div>
+      </div>
+    `);
+
+    if (sidebar.classList.contains('active')) toggleSidebar();
+  }
+
+  function dueSoonActionPay() {
+    appendMsg('ai', `
+      <div>
+        好的。你想先处理哪一笔？<br><br>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="markDueSoonPaid('Akulaku')">先还 Akulaku（3天）</button>
+          <button class="btn btn-secondary" onclick="markDueSoonPaid('Kredivo')">先还 Kredivo（6天）</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function markDueSoonPaid(platform) {
+    appendMsg('ai', `
+      <div>
+        明白了。完成还款后你可以点下面确认，我会更新状态并重算建议。<br><br>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="appendMsg('ai','✅ 已记录：${platform} 本期已处理。我将更新你的本月还款进度。')">我已还款</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','没问题。如果你需要拆分成更轻的方案，也可以告诉我你本周最多能还多少。')">我还不了，想调整</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function dueSoonAskChange() {
+    appendMsg('ai', `
+      <div>
+        好的。收支变化会影响还款安排。<br>
+        你可以直接输入：<br>
+        • 工资 10000<br>
+        • 房租 10000<br><br>
+        或者点下面快速记录：
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="flowIncome()">新增收入</button>
+          <button class="btn btn-secondary" onclick="flowExpense()">新增支出</button>
+        </div>
+      </div>
+    `);
+  }
+
+  // -----------------------------
+  // 场景：逾期提醒（Overdue）
+  // -----------------------------
+  function scenarioOverdue() {
+    chatBox.innerHTML = '';
+    setActiveHistory('逾期提醒');
+
+    userState = { loan: 128450000, income: 10000000, expense: 6500000 };
+
+    appendMsg('ai', `
+      <div>
+        <strong style="color: var(--primary-color);">需要您立即确认：</strong><br>
+        我发现账单已经<strong>超过还款日期</strong>。<br>
+        您是否已经完成还款？（先确认状态，我再继续给您建议）
+      </div>
+    `);
+
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">🚨 逾期账单提醒</div>
+
+        <div class="data-row">
+          <span class="data-label">Akulaku</span>
+          <span class="data-value" style="color: var(--primary-color); font-weight:800;">已逾期2天</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">应还金额</span>
+          <span class="data-value highlight">1,200,000 印尼盾</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">原还款日</span>
+          <span class="data-value">02月08日</span>
+        </div>
+
+        <div style="margin-top:12px; padding:12px; background:#F8F9FA; border-radius:8px; border-left:4px solid var(--primary-color)">
+          <div style="font-size:12px; color:#555; line-height:1.5">
+            如果处理不当，可能会产生<strong>额外费用</strong>，并可能影响<strong>信用记录</strong>。<br>
+            我可以尽力降低影响并调整后续还款安排。
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="overduePaid()">我还了</button>
+          <button class="btn btn-secondary" onclick="overdueNotPaid()">还没，帮我看看怎么办</button>
+          <button class="btn btn-ghost" onclick="overdueCashTight()">我现在资金紧张</button>
+        </div>
+      </div>
+    `);
+
+    if (sidebar.classList.contains('active')) toggleSidebar();
+  }
+
+  function overduePaid() {
+    appendMsg('ai', `
+      <div>
+        好的，我先帮你把账单标记为<strong>已还</strong>。<br>
+        <span style="color: var(--text-sub); font-size: 12px;">如果你愿意，也可以补充还款金额/截图让我更准确更新。</span>
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="appendMsg('ai','✅ 记录：Akulaku本期已还。我将更新你的还款状态并重新计算后续建议。')">确认已还</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','你可以直接上传还款凭证/截图（任选），我会自动识别并同步。')">上传凭证（任选）</button>
+        </div>
+      </div>
+    `);
+
+    setTimeout(() => {
+      appendMsg('ai', `
+        需要我顺便检查一下<strong>未来7天</strong>是否还有临期账单吗？
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="appendMsg('ai','好的，我开始检查并整理接下来7天的还款优先级。你也可以点「智能分析」生成完整报告。')">帮我检查</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','好的。如果以后需要我调整计划或者提醒你，随时找我。')">暂时不用</button>
+        </div>
+      `);
+    }, 600);
+  }
+
+  function overdueNotPaid() {
+    appendMsg('ai', `
+      <div>
+        我明白了。我建议你尽快处理逾期账单，以降低额外费用和风险。<br><br>
+        你现在更倾向于哪种方式？
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="appendMsg('ai','好的，我们先把Akulaku作为优先项。我可以给你一个“最省成本”的处理顺序，并生成后续计划。')">优先处理逾期账单</button>
+          <button class="btn btn-secondary" onclick="overdueAskChange()">先更新我的收支情况</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function overdueCashTight() {
+    appendMsg('ai', `
+      <div>
+        我理解。如果资金紧张，我们可以先做一个“风险最小化”的方案：<br>
+        • 优先处理逾期项目（先把风险项压下去）<br>
+        • 同时调整其他账单顺序，避免连锁逾期<br><br>
+        最近你的收入或支出有变化吗？这会影响我给你的方案。
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="overdueAskChange()">我近期收支有变化</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','你也可以直接告诉我：本周最多还能多少（例如：本周最多还能300000）。我会按这个金额生成执行方案。')">我没变化，但我能还有限</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function overdueAskChange() {
+    appendMsg('ai', `
+      <div>
+        好的。你可以直接输入一条信息即可：<br>
+        • 工资10000<br>
+        • 房租10000<br>
+        • 电话1500<br><br>
+        或者用快捷键快速记录：
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="flowIncome()">新增收入</button>
+          <button class="btn btn-secondary" onclick="flowExpense()">新增支出</button>
+        </div>
+      </div>
+    `);
+  }
+
+  // ---------------------------------------------------
+  // ✅ 新增场景：本月已还清（全部已付款）
+  // ---------------------------------------------------
+  function scenarioAllPaid() {
+    chatBox.innerHTML = '';
+    setActiveHistory('本月已还清');
+
+    // 演示：本月已全部还清（真实数据替换为你的数据源）
+    userState = {
+      loan: 128450000,
+      income: 10000000,
+      expense: 6200000
+    };
+
+    appendMsg('ai', `
+      <div>
+        <strong style="color: var(--success-color);">做得很好！</strong><br>
+        你已经完成<strong>本月所有还款</strong> ✅<br>
+        我可以帮你提前看看下个月的压力，并找出节省利息的机会。
+      </div>
+    `);
+
+    // 正反馈卡
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">🎉 本月还款完成</div>
+
+        <div class="data-row">
+          <span class="data-label">本月状态</span>
+          <span class="data-value" style="color: var(--success-color); font-weight:800;">全部已还</span>
+        </div>
+
+        <div class="data-row">
+          <span class="data-label">每月收入</span>
+          <span class="data-value">Rp ${userState.income.toLocaleString()}</span>
+        </div>
+
+        <div class="data-row" style="border-bottom:none;">
+          <span class="data-label">每月支出</span>
+          <span class="data-value">Rp ${userState.expense.toLocaleString()}</span>
+        </div>
+
+        <div style="margin-top:12px; padding:12px; background:#F0FFF4; border-radius:8px; border-left:4px solid var(--success-color)">
+          <div style="font-size:12px; color:#2F855A; line-height:1.5">
+            继续保持这个节奏，你的资金压力会更可控。<br>
+            下个月我也可以提前提醒关键还款日，避免临期手忙脚乱。
+          </div>
+        </div>
+      </div>
+    `);
+
+    // 下月预测卡
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">🔭 下月预测（演示）</div>
+
+        <div class="data-row">
+          <span class="data-label">预计下月应还</span>
+          <span class="data-value highlight">Rp 4,100,000</span>
+        </div>
+
+        <div class="data-row">
+          <span class="data-label">最早还款日</span>
+          <span class="data-value">Akulaku · 03月05日</span>
+        </div>
+
+        <div class="data-row" style="border-bottom:none;">
+          <span class="data-label">还款压力</span>
+          <span class="data-value" style="color: var(--warning-color); font-weight:700;">中等</span>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="allPaidPlan()">生成下月还款计划</button>
+          <button class="btn btn-ghost" onclick="allPaidAskUpdate()">更新我的收支</button>
+        </div>
+      </div>
+    `);
+
+    // 省利息机会卡
+    appendMsg('ai', `
+      <div class="card">
+        <div class="card-title">💡 利息节省机会</div>
+
+        <div class="data-row">
+          <span class="data-label">建议动作</span>
+          <span class="data-value">提前处理 Akulaku</span>
+        </div>
+
+        <div class="data-row" style="border-bottom:none;">
+          <span class="data-label">预计可节省</span>
+          <span class="data-value highlight">Rp 450,000</span>
+        </div>
+
+        <div style="margin-top:12px; padding:12px; background:#FFF5F5; border-radius:8px; border-left:4px solid var(--primary-color)">
+          <div style="font-size:12px; color:#742A2A; line-height:1.5">
+            如果你在还款日前提前结清/还一部分，通常可以减少利息或额外费用。<br>
+            我可以根据你的偏好，给你一个更稳妥的安排。
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="allPaidSaveInterest()">帮我做省利息方案</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','好的。如果你之后想调整优先级或需要提醒，随时点「智能分析」。')">先不用</button>
+        </div>
+      </div>
+    `);
+
+    if (sidebar.classList.contains('active')) toggleSidebar();
+  }
+
+  function allPaidPlan() {
+    appendMsg('ai', `
+      <div>
+        好的。我会根据你当前的收入/支出与下个月的账单，生成一个更有效的计划。<br><br>
+        最近你的收入或支出有变化吗？如果有，计划会更准确。
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="allPaidAskUpdate()">有变化，先更新</button>
+          <button class="btn btn-secondary" onclick="appendMsg('ai','✅ 下月计划（演示）：已优先 Akulaku（03月05日），其次 Kredivo。需要我按“省利息”或“稳健”两种方案给你对比吗？')">没变化，直接生成</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function allPaidAskUpdate() {
+    appendMsg('ai', `
+      <div>
+        你可以直接输入一条信息即可：<br>
+        • 工资10000<br>
+        • 房租10000<br>
+        • 电话1500<br><br>
+        或者用快捷键快速记录：
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="flowIncome()">新增收入</button>
+          <button class="btn btn-secondary" onclick="flowExpense()">新增支出</button>
+        </div>
+      </div>
+    `);
+  }
+
+  function allPaidSaveInterest() {
+    appendMsg('ai', `
+      <div>
+        好，我会优先给你一个“省利息”的方案。<br>
+        为了更准确，我确认：你下个月是否愿意预留一部分资金用于提前还款？<br><br>
+        你可以直接告诉我：<br>
+        • 下月我能提前还500000<br>
+        或者点下面选项：
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="appendMsg('ai','明白了。我将按“可提前还款”的前提，优先优化 Akulaku 的利息成本，并生成具体顺序与时间点。')">可以，给我省利息方案</button>
+          <button class="btn btn-ghost" onclick="appendMsg('ai','没问题。我会改用“稳健”策略，在不影响生活支出的情况下尽量减少利息。')">不确定/暂不提前还</button>
+        </div>
+      </div>
+    `);
+  }
+    // -----------------------------
+  // 资金缺口
+  // -----------------------------
+  function scenarioShortfall() {
+  chatBox.innerHTML = '';
+  if (typeof setActiveHistory === 'function') setActiveHistory('资金缺口');
+
+  // Demo：模拟一个“本月资金不够覆盖待还”的状态
+  userState = {
+    income: 10000000,
+    expense: 7200000,
+    due: 4800000
+  };
+
+  const available = userState.income - userState.expense;
+  const gap = userState.due - available;
+
+  appendMsg('ai', `
+    <div>
+      <strong style="color: var(--warning-color);">我需要提醒你一个重要情况：</strong><br>
+      按当前记录的收入和支出，<br>
+      你本月用于还款的资金 <strong>可能不够</strong>。
+    </div>
+  `);
+
+  appendMsg('ai', `
+    <div class="card">
+      <div class="card-title">⚠️ 资金缺口预警</div>
+
+      <div class="data-row">
+        <span class="data-label">本月收入</span>
+        <span class="data-value">Rp ${userState.income.toLocaleString()}</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">本月支出</span>
+        <span class="data-value">Rp ${userState.expense.toLocaleString()}</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">本月待还</span>
+        <span class="data-value highlight">Rp ${userState.due.toLocaleString()}</span>
+      </div>
+
+      <div style="margin-top:10px; padding:12px; background:#FFF7ED; border-radius:8px; border-left:4px solid var(--warning-color)">
+        <div style="font-size:12px; color:#7C2D12; line-height:1.5">
+          在扣除必要支出后，预计仍有 <strong>Rp ${gap.toLocaleString()}</strong> 的资金缺口。<br>
+          如果不调整方案，可能会带来逾期或额外费用风险。
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="shortfallPlan()">帮我生成可执行方案</button>
+        <button class="btn btn-secondary" onclick="shortfallAskUpdate()">更新收入 / 支出</button>
+        <button class="btn btn-ghost" onclick="shortfallLimit()">我只能还一部分</button>
+      </div>
+    </div>
+  `);
+
+  if (sidebar.classList.contains('active')) toggleSidebar();
+}
+
+function shortfallPlan() {
+  appendMsg('ai', `
+    <div>
+      我可以给你两种方案，你选一种即可：<br><br>
+
+      <strong>方案 A｜稳住不逾期</strong><br>
+      • 优先处理逾期/临期账单<br>
+      • 其余账单采用最低可行额度<br><br>
+
+      <strong>方案 B｜尽量省利息</strong><br>
+      • 优先处理利息和费用更高的平台<br>
+      • 可能会更占用现金流
+
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="appendMsg('ai','好的，我将按【稳住不逾期】为你生成可执行方案，并重新排序本月还款优先级。')">选方案 A</button>
+        <button class="btn btn-secondary" onclick="appendMsg('ai','明白了，我将按【尽量省利息】方案，优先优化高成本账单。')">选方案 B</button>
+      </div>
+    </div>
+  `);
+}
+
+function shortfallAskUpdate() {
+  appendMsg('ai', `
+    <div>
+      收支变化会直接影响可用方案。<br>
+      你可以直接输入一条：<br>
+      • 工资 10000<br>
+      • 房租 10000<br><br>
+      或用快捷按钮：
+      <div class="btn-group" style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="flowIncome()">新增收入</button>
+        <button class="btn btn-secondary" onclick="flowExpense()">新增支出</button>
+      </div>
+    </div>
+  `);
+}
+
+function shortfallLimit() {
+  appendMsg('ai', `
+    <div>
+      明白。你可以直接告诉我一个上限即可。<br>
+      例如：<br>
+      • 本周最多还 300000<br>
+      • 这个月最多还 1500000<br><br>
+      我会在这个范围内，帮你安排风险最低的顺序。
+    </div>
+  `);
+}
+
+  // -----------------------------
+  // 业务流：贷款 / 收入 / 支出 / 分析
+  // -----------------------------
+  function flowLoan() {
+    appendMsg('ai', `
+      <strong>[录入贷款]</strong> 请选择平台并上传截图：
+      <div class="card">
+        <select id="p_select_new" style="width:100%; padding:10px; margin-bottom:12px; border-radius:8px; border:1px solid #ddd;">
+          <option>Akulaku</option>
+          <option>Kredivo</option>
+        </select>
+        <div class="upload-placeholder">
+          <div class="u-box" onclick="markUpload(this)">📷截图1</div>
+          <div class="u-box" onclick="markUpload(this)">📷截图2</div>
+          <div class="u-box" onclick="markUpload(this)">📷还款日</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="confirmLoan(this)">提交识别</button>
+      </div>
+    `);
+  }
+
+  function confirmLoan(btn) {
+    btn.disabled = true;
+    btn.innerText = "🔍 AI 正在解析...";
+    setTimeout(() => {
+      const amount = 5000000;
+      const html = `
+        <div class="card">
+          <div class="card-title">🔍 识别报告</div>
+          <div class="data-row"><span class="data-label">检测到平台</span><span class="data-value">Akulaku</span></div>
+          <div class="data-row"><span class="data-label">应还总额</span><span class="data-value highlight">Rp ${amount.toLocaleString()}</span></div>
+          <div class="data-row"><span class="data-label">最近还款日</span><span class="data-value">02月10日</span></div>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="saveLoanStep(${amount}, this)">确认入库</button>
+            <button class="btn btn-ghost" onclick="appendMsg('ai','请重新上传更清晰的截图。')">识别有误</button>
+          </div>
+        </div>`;
+      btn.closest('.bubble').innerHTML = html;
+    }, 900);
+  }
+
+  function saveLoanStep(amt, btn) {
+    userState.loan += amt;
+    btn.closest('.bubble').innerHTML = '✅ 贷款信息已锁定入库。';
+    setTimeout(() => {
+      appendMsg('ai', `<strong>[步骤 2/3]</strong> 贷款已识别。接下来，请告诉我你的<strong>月收入</strong>是多少？<br><br>你可以输入“工资10000”或“月薪8500”。`);
+    }, 600);
+  }
+
+  function flowIncome() { appendMsg('ai', '请输入你的月收入金额（例如：发工资 12000）。'); }
+  function flowExpense() { appendMsg('ai', '请记录一笔支出（例如：今天打车花了 25）。'); }
+
+  function handleSend() {
+    const input = document.getElementById('userInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    appendMsg('user', text);
+    input.value = '';
+
+    const numMatch = text.replace(/,/g, '').match(/\d+(\.\d+)?/);
+    const amount = numMatch ? parseFloat(numMatch[0]) : null;
+
+    const incomeKeys = ['工资','收入','发钱','入账','领钱','薪','income'];
+    const expenseKeys = ['花','买','消费','支出','支付','打车','外卖','费','rp','块','pay','吃','喝'];
+
+    setTimeout(() => {
+      if (!amount) {
+        appendMsg('ai', '收到！你可以继续输入金额（如：吃饭30），或者点击下方功能按钮进行操作。');
+        return;
+      }
+
+      const isIncome = incomeKeys.some(k => text.toLowerCase().includes(k.toLowerCase()));
+      const isExpense = expenseKeys.some(k => text.toLowerCase().includes(k.toLowerCase())) || (!isIncome && text.length < 15);
+
+      if (isIncome) {
+        appendMsg('ai', `识别到<strong>收入</strong>：Rp ${amount.toLocaleString()}<br><button class="btn btn-primary" style="margin-top:10px; width:100%" onclick="confirmRecord('income', ${amount}, this)">确认录入</button>`);
+      } else if (isExpense) {
+        appendMsg('ai', `识别到<strong>支出</strong>：Rp ${amount.toLocaleString()}<br><button class="btn btn-secondary" style="margin-top:10px; width:100%" onclick="confirmRecord('expense', ${amount}, this)">确认支出</button>`);
+      } else {
+        appendMsg('ai', `
+          识别到数字，请问这是收入还是支出？
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="confirmRecord('income', ${amount}, this)">收入</button>
+            <button class="btn btn-secondary" onclick="confirmRecord('expense', ${amount}, this)">支出</button>
+          </div>
+        `);
+      }
+    }, 400);
+  }
+
+  function confirmRecord(type, val, btn) {
+    userState[type] += val;
+    btn.closest('.bubble').innerHTML = `✅ 已记入${type === 'income' ? '收入' : '支出'}：Rp ${val.toLocaleString()}`;
+
+    setTimeout(() => {
+      if (type === 'income' && userState.expense === 0) {
+        appendMsg('ai', `<strong>[步骤 3/3]</strong> 收入已记下。最后，建议录入几笔<strong>日常支出</strong>（如：房租、饭费），我将为你生成全方位的健康分析报告。`);
+      } else if (userState.loan > 0 && userState.income > 0 && userState.expense > 0) {
+        appendMsg('ai', `✨ 数据已收齐！现在可以点击下方<strong>“深度分析报告”</strong>，查看你的财务健康评估了。`);
+      }
+    }, 700);
+  }
+
+  function flowAnalyze() {
+    if (userState.loan === 0 && userState.income === 0) {
+      appendMsg('ai', '分析数据不足。请先完成【贷款录入】和【收入录入】。');
+      return;
+    }
+
+    appendMsg('user', '生成深度分析报告');
+    const loadingMsg = appendMsg('ai', '正在调用 AI 财务模型进行深度计算...');
+
+    setTimeout(() => {
+      loadingMsg.querySelector('.bubble').innerHTML = '分析完成！这是你的财务健康报告：';
+
+      const debtRatio = ((userState.loan / (userState.income || 1)) * 100);
+      const expenseRatio = ((userState.expense / (userState.income || 1)) * 100);
+      const status = debtRatio > 50 ? '危险' : (debtRatio > 30 ? '警示' : '健康');
+      const statusColor = status === '危险' ? '#EB3223' : (status === '警示' ? '#FF9800' : '#4CAF50');
+
+      appendMsg('ai', `
+        <div class="card">
+          <div class="card-title">📊 深度财务评估报告</div>
+
+          <div style="margin: 15px 0;">
+            <div class="data-row" style="border:none; padding-bottom:5px;">
+              <span class="data-label">债务压力指数</span>
+              <span class="data-value" style="color:${statusColor}; font-weight:800;">${status} (${debtRatio.toFixed(1)}%)</span>
+            </div>
+            <div class="analysis-progress">
+              <div class="progress-fill" style="width:${Math.min(debtRatio,100)}%; background:${statusColor};"></div>
+            </div>
+          </div>
+
+          <div class="data-row"><span class="data-label">月总收入</span><span class="data-value">Rp ${userState.income.toLocaleString()}</span></div>
+          <div class="data-row"><span class="data-label">月总支出</span><span class="data-value">Rp ${userState.expense.toLocaleString()}</span></div>
+          <div class="data-row" style="border-bottom:none;"><span class="data-label">月总债务</span><span class="data-value">Rp ${userState.loan.toLocaleString()}</span></div>
+
+          <div style="margin-top:15px; padding:12px; background:#F8F9FA; border-radius:8px; border-left:4px solid ${statusColor}">
+            <p style="font-size:12px; color:#555; line-height:1.5">
+              ${status === '危险'
+                ? '压力过大！建议立即削减非必要支出，并优先处理高成本债务。'
+                : (status === '警示'
+                  ? '压力偏高，建议制定还款优先级，并保留必要现金缓冲。'
+                  : '财务状况不错，建议建立 3-6 个月的现金缓冲池，并持续跟踪支出结构。')}
+              <br>（支出占比：${expenseRatio.toFixed(1)}%）
+            </p>
+          </div>
+        </div>
+      `);
+    }, 900);
+  }
+
+  window.onload = resetApp;
+</script>
+</body>
+</html>
