@@ -148,6 +148,7 @@
       font-size: 14px;
       line-height: 1.6;
       box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      word-break: break-word;
     }
     .ai .bubble { background: white; border-top-left-radius: 4px; color: #334155; }
     .user .bubble { background: var(--primary-color); color: white; border-top-right-radius: 4px; }
@@ -155,9 +156,9 @@
     .card { background: white; border-radius: 12px; padding: 16px; margin-top: 10px; border: 1px solid var(--border-color); }
     .card-title { font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
 
-    .data-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dotted var(--border-color); }
+    .data-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dotted var(--border-color); gap: 10px; }
     .data-label { color: var(--text-sub); font-size: 13px; }
-    .data-value { font-weight: 600; font-size: 14px; }
+    .data-value { font-weight: 600; font-size: 14px; text-align: right; }
     .data-value.highlight { color: var(--primary-color); }
 
     .analysis-progress { height: 8px; background: #EDEFF2; border-radius: 4px; margin: 10px 0; overflow: hidden; }
@@ -202,6 +203,63 @@
       user-select: none;
     }
     .u-box.filled { border-color: var(--success-color); background: #F0FFF4; color: var(--success-color); }
+
+    /* ✅ 对话内报告：固定高度 + 内部滚动 */
+    .report-in-chat {
+      margin-top: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .report-in-chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .report-in-chat-title {
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .report-in-chat-body {
+      max-height: 360px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px;
+      background: #fff;
+    }
+    .report-in-chat-footer {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border-color);
+      background: rgba(255,255,255,0.96);
+    }
+
+    /* 报告内小标签 */
+    details {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-top: 12px;
+      background: #fff;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: var(--text-main);
+      list-style: none;
+    }
+    summary::-webkit-details-marker { display: none; }
   </style>
 </head>
 
@@ -218,30 +276,29 @@
         <span>新用户 (首次进入)</span>
       </div>
 
-      <div class="history-item" onclick="scenarioDueSoon()">
+      <div class="history-item" onclick="scenarioDueSoon && scenarioDueSoon()">
         <div class="dot" style="background: var(--warning-color);"></div>
         <span>临期提醒（≤7天）</span>
       </div>
 
-      <div class="history-item" onclick="scenarioOverdue()">
+      <div class="history-item" onclick="scenarioOverdue && scenarioOverdue()">
         <div class="dot" style="background: var(--primary-color);"></div>
         <span>逾期提醒（Overdue）</span>
       </div>
 
-      <!-- ✅ 新增：本月已还清 -->
-      <div class="history-item" onclick="scenarioAllPaid()">
+      <div class="history-item" onclick="scenarioAllPaid && scenarioAllPaid()">
         <div class="dot" style="background: var(--success-color);"></div>
         <span>本月已还清</span>
       </div>
 
-     <div class="history-item" onclick="scenarioShortfall()">
-      <div class="dot" style="background: var(--warning-color);"></div>
-      <span>资金缺口</span>
-     </div>
+      <div class="history-item" onclick="scenarioShortfall && scenarioShortfall()">
+        <div class="dot" style="background: var(--warning-color);"></div>
+        <span>资金缺口</span>
+      </div>
     </div>
 
     <div style="padding: 20px; font-size: 12px; color: #666;">
-      版本: v2.5.0 (AI 内核)
+      版本: v2.6.0 (AI 内核)
     </div>
   </div>
 
@@ -257,7 +314,7 @@
           <line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
       </div>
-      <nav class="nav-bar">🤖 AI 资金管理助手</nav>
+      <nav class="nav-bar">🤖 AI 资金管理管家</nav>
     </div>
 
     <div class="chat-container" id="chatBox"></div>
@@ -277,7 +334,7 @@
             class="main-input"
             id="userInput"
             placeholder="例如：刚才吃饭花了30..."
-            onkeypress="if(event.keyCode==13) handleSend()"
+            onkeydown="if(event.key==='Enter') handleSend()"
           />
         </div>
         <button onclick="handleSend()" style="background:none; border:none; color:var(--primary-color); display:flex;">
@@ -294,12 +351,7 @@
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('overlay');
 
-  // 统一 userState（避免你原脚本里 income/Income、expense/费用 等大小写混乱）
-  let userState = {
-    loan: 0,
-    income: 0,
-    expense: 0
-  };
+  let userState = { loan: 0, income: 0, expense: 0, reportGenerated: false };
 
   function toggleSidebar() {
     sidebar.classList.toggle('active');
@@ -330,12 +382,142 @@
     el.innerHTML = '<span>✅</span>已就绪';
   }
 
+  /* ===============================
+     预设问题 + 预设答案（成品）
+     =============================== */
+  const PRESET_QA = {
+    safePay: {
+      question: '我这周最多还能还多少钱比较安全？',
+      answer: `
+        <div>
+          我已经按「不影响基本生活 + 不断现金流」帮你算过了 👇<br><br>
+          <div class="card">
+            <div class="card-title">📌 本周安全还款上限</div>
+            <div class="data-row"><span class="data-label">当前可用现金</span><span class="data-value">Rp 2,300,000</span></div>
+            <div class="data-row"><span class="data-label">最低生活预留</span><span class="data-value">Rp 500,000</span></div>
+            <div class="data-row"><span class="data-label">本周必要支出</span><span class="data-value">Rp 900,000</span></div>
+            <div class="data-row" style="border-bottom:none;">
+              <span class="data-label"><strong>建议本周最多还</strong></span>
+              <span class="data-value highlight" style="font-size:16px;">Rp 900,000</span>
+            </div>
+          </div>
+          <div style="font-size:13px; color:#475569; margin-top:10px; line-height:1.6;">
+            这个金额可以优先压住高风险账单，同时不会影响你的基本生活。
+          </div>
+          <div style="margin-top:12px;">需要我把这 Rp 900,000 按「最防逾期」帮你分配吗？</div>
+        </div>
+      `
+    },
+    noLoanRisk: {
+      question: '如果我不借新钱，会有什么风险？',
+      answer: `
+        <div>
+          我直接告诉你<strong>最可能发生的情况</strong> 👇<br><br>
+          <div class="card">
+            <div class="card-title">⚠️ 不借新钱的风险评估</div>
+            <div class="data-row"><span class="data-label">短期结果</span><span class="data-value" style="color:#C62828;font-weight:800;">部分账单逾期</span></div>
+            <div class="data-row"><span class="data-label">额外成本</span><span class="data-value">约 Rp 120,000 / 周</span></div>
+            <div class="data-row" style="border-bottom:none;"><span class="data-label">信用影响</span><span class="data-value">中等（不会立刻封号）</span></div>
+          </div>
+          <div style="font-size:13px; color:#475569; margin-top:10px; line-height:1.6;">
+            高利率账单会优先放大成本，但并不会马上影响全部账户。
+          </div>
+          <div style="margin-top:12px; padding:12px; background:#FFF7ED; border-radius:8px;">
+            <strong>更稳的做法：</strong><br>
+            不是「借 or 不借」，而是<strong>只借最低利率的一小部分</strong>来压住最高风险账单。
+          </div>
+          <div style="margin-top:12px;">你希望我给你「完全不借」还是「只借一点点」的方案？</div>
+        </div>
+      `
+    }
+  };
+
+  function askPreset(key) {
+    const qa = PRESET_QA[key];
+    if (!qa) return;
+    appendMsg('user', qa.question);
+    setTimeout(() => appendMsg('ai', qa.answer), 250);
+  }
+
+  // ✅✅✅ 在对话里插入“可滚动报告窗口”（已去掉“问AI生成可执行方案”按钮）
+  function appendReport(reportInnerHTML) {
+    const shell = `
+      <div class="report-in-chat">
+        <div class="report-in-chat-header">
+          <div class="report-in-chat-title">📊 智能资金管理报告</div>
+          <span style="font-size:12px; color:#8A8F99;">可上下滑动</span>
+        </div>
+
+        <div class="report-in-chat-body">
+          ${reportInnerHTML}
+        </div>
+
+        <div class="report-in-chat-footer">
+          <div style="font-size:13px; color:#334155; margin-bottom:8px;">
+            你可以继续问我：
+          </div>
+          <div class="btn-group" style="margin-top:0;">
+            <button class="btn btn-primary" onclick="askPreset('safePay')">我这周最多还能还多少钱？</button>
+            <button class="btn btn-secondary" onclick="askPreset('noLoanRisk')">如果我不借新钱会怎样？</button>
+          </div>
+        </div>
+      </div>
+    `;
+    appendMsg('ai', shell);
+  }
+
+  function buildReportHTML({ debtRatio, expenseRatio, status, statusColor, income, expense, loan }) {
+    return `
+      <div class="card" style="margin-top:0;">
+        <div class="card-title">📌 最重要信息</div>
+        <div class="data-row">
+          <span class="data-label">债务压力</span>
+          <span class="data-value" style="color:${statusColor}; font-weight:800;">
+            ${status} (${debtRatio.toFixed(1)}%)
+          </span>
+        </div>
+        <div class="analysis-progress">
+          <div class="progress-fill" style="width:${Math.min(debtRatio,100)}%; background:${statusColor};"></div>
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:#555; line-height:1.6">
+          支出占比：${expenseRatio.toFixed(1)}%<br>
+          建议：优先处理高成本/临期账单，保留基本生活现金。
+        </div>
+      </div>
+
+      <details open>
+        <summary>📊 基础数据</summary>
+        <div class="data-row"><span class="data-label">月总收入</span><span class="data-value">Rp ${income.toLocaleString()}</span></div>
+        <div class="data-row"><span class="data-label">月总支出</span><span class="data-value">Rp ${expense.toLocaleString()}</span></div>
+        <div class="data-row" style="border-bottom:none;"><span class="data-label">月总债务</span><span class="data-value">Rp ${loan.toLocaleString()}</span></div>
+      </details>
+
+      <details>
+        <summary>✅ 下一步建议</summary>
+        <div style="font-size:13px; color:#334155; line-height:1.7; margin-top:8px;">
+          1) 更新本周收入/支出（如果有变化）<br>
+          2) 我会按“到期更近 + 成本更高”排序账单<br>
+          3) 生成可执行的分阶段还款计划
+        </div>
+      </details>
+
+      <details>
+        <summary>🧾 还款优先级（示例）</summary>
+        <div style="font-size:13px; color:#334155; line-height:1.7; margin-top:8px;">
+          • Akulaku（3天）优先<br>
+          • Kredivo（6天）其次<br>
+          （后续接真实账单后会自动生成）
+        </div>
+      </details>
+    `;
+  }
+
   // -----------------------------
   // 入口：新用户（首次进入）
   // -----------------------------
   function resetApp() {
     chatBox.innerHTML = '';
-    userState = { loan: 0, income: 0, expense: 0 };
+    userState = { loan: 0, income: 0, expense: 0, reportGenerated: false };
     setActiveHistory('新用户');
 
     appendMsg('ai', `
@@ -349,29 +531,10 @@
       </div>
     `);
 
-    appendMsg('ai', `
-      <div class="card">
-        <div class="card-title">📱 贷款信息识别</div>
-
-        <select id="p_select" style="width:100%; padding:12px; margin-bottom:12px; border-radius:8px; border:1px solid #ddd; appearance:none; background:#fff; font-size:14px;">
-          <option>Akulaku</option>
-          <option>Kredivo</option>
-          <option>Shopee PayLater</option>
-        </select>
-
-        <div class="upload-placeholder">
-          <div class="u-box" onclick="markUpload(this)"><span>📷</span>额度页</div>
-          <div class="u-box" onclick="markUpload(this)"><span>📷</span>账单页</div>
-          <div class="u-box" onclick="markUpload(this)"><span>📷</span>还款日</div>
-        </div>
-
-        <button class="btn btn-primary" style="width:100%" onclick="confirmLoan(this)">开始智能识别</button>
-      </div>
-    `);
+    flowLoan();
 
     if (sidebar.classList.contains('active')) toggleSidebar();
   }
-
   // -----------------------------
   // 场景：临期提醒（≤7天）
   // -----------------------------
@@ -849,7 +1012,6 @@ function shortfallLimit() {
     </div>
   `);
 }
-
   // -----------------------------
   // 业务流：贷款 / 收入 / 支出 / 分析
   // -----------------------------
@@ -876,10 +1038,11 @@ function shortfallLimit() {
     btn.innerText = "🔍 AI 正在解析...";
     setTimeout(() => {
       const amount = 5000000;
+      const platform = document.getElementById('p_select_new')?.value || 'Akulaku';
       const html = `
         <div class="card">
           <div class="card-title">🔍 识别报告</div>
-          <div class="data-row"><span class="data-label">检测到平台</span><span class="data-value">Akulaku</span></div>
+          <div class="data-row"><span class="data-label">检测到平台</span><span class="data-value">${platform}</span></div>
           <div class="data-row"><span class="data-label">应还总额</span><span class="data-value highlight">Rp ${amount.toLocaleString()}</span></div>
           <div class="data-row"><span class="data-label">最近还款日</span><span class="data-value">02月10日</span></div>
           <div class="btn-group">
@@ -893,6 +1056,7 @@ function shortfallLimit() {
 
   function saveLoanStep(amt, btn) {
     userState.loan += amt;
+    userState.reportGenerated = false;
     btn.closest('.bubble').innerHTML = '✅ 贷款信息已锁定入库。';
     setTimeout(() => {
       appendMsg('ai', `<strong>[步骤 2/3]</strong> 贷款已识别。接下来，请告诉我你的<strong>月收入</strong>是多少？<br><br>你可以输入“工资10000”或“月薪8500”。`);
@@ -922,8 +1086,9 @@ function shortfallLimit() {
         return;
       }
 
-      const isIncome = incomeKeys.some(k => text.toLowerCase().includes(k.toLowerCase()));
-      const isExpense = expenseKeys.some(k => text.toLowerCase().includes(k.toLowerCase())) || (!isIncome && text.length < 15);
+      const lower = text.toLowerCase();
+      const isIncome = incomeKeys.some(k => lower.includes(k.toLowerCase()));
+      const isExpense = expenseKeys.some(k => lower.includes(k.toLowerCase())) || (!isIncome && text.length < 15);
 
       if (isIncome) {
         appendMsg('ai', `识别到<strong>收入</strong>：Rp ${amount.toLocaleString()}<br><button class="btn btn-primary" style="margin-top:10px; width:100%" onclick="confirmRecord('income', ${amount}, this)">确认录入</button>`);
@@ -943,64 +1108,57 @@ function shortfallLimit() {
 
   function confirmRecord(type, val, btn) {
     userState[type] += val;
+    userState.reportGenerated = false;
     btn.closest('.bubble').innerHTML = `✅ 已记入${type === 'income' ? '收入' : '支出'}：Rp ${val.toLocaleString()}`;
 
     setTimeout(() => {
       if (type === 'income' && userState.expense === 0) {
         appendMsg('ai', `<strong>[步骤 3/3]</strong> 收入已记下。最后，建议录入几笔<strong>日常支出</strong>（如：房租、饭费），我将为你生成全方位的健康分析报告。`);
-      } else if (userState.loan > 0 && userState.income > 0 && userState.expense > 0) {
-        appendMsg('ai', `✨ 数据已收齐！现在可以点击下方<strong>“深度分析报告”</strong>，查看你的财务健康评估了。`);
+        return;
+      }
+
+      const ready = (userState.loan > 0 && userState.income > 0 && userState.expense > 0);
+      if (ready && !userState.reportGenerated) {
+        userState.reportGenerated = true;
+        appendMsg('ai', `✨ 数据已收齐！我现在为你生成<strong>深度分析报告</strong>（报告在对话中，可上下滑动）。`);
+        setTimeout(() => flowAnalyze(true), 300);
+        return;
+      }
+
+      if (ready && userState.reportGenerated) {
+        appendMsg('ai', `已更新记录 ✅ 如果你想重新计算报告，可以点下方「深度分析报告」。`);
       }
     }, 700);
   }
 
-  function flowAnalyze() {
+  function flowAnalyze(auto = false) {
     if (userState.loan === 0 && userState.income === 0) {
       appendMsg('ai', '分析数据不足。请先完成【贷款录入】和【收入录入】。');
       return;
     }
 
-    appendMsg('user', '生成深度分析报告');
+    if (!auto) appendMsg('user', '生成深度分析报告');
     const loadingMsg = appendMsg('ai', '正在调用 AI 财务模型进行深度计算...');
 
     setTimeout(() => {
-      loadingMsg.querySelector('.bubble').innerHTML = '分析完成！这是你的财务健康报告：';
+      loadingMsg.querySelector('.bubble').innerHTML = '分析完成！报告已生成在对话中（可上下滑动查看）。';
 
       const debtRatio = ((userState.loan / (userState.income || 1)) * 100);
       const expenseRatio = ((userState.expense / (userState.income || 1)) * 100);
       const status = debtRatio > 50 ? '危险' : (debtRatio > 30 ? '警示' : '健康');
       const statusColor = status === '危险' ? '#EB3223' : (status === '警示' ? '#FF9800' : '#4CAF50');
 
-      appendMsg('ai', `
-        <div class="card">
-          <div class="card-title">📊 深度财务评估报告</div>
+      const reportInnerHTML = buildReportHTML({
+        debtRatio,
+        expenseRatio,
+        status,
+        statusColor,
+        income: userState.income || 0,
+        expense: userState.expense || 0,
+        loan: userState.loan || 0
+      });
 
-          <div style="margin: 15px 0;">
-            <div class="data-row" style="border:none; padding-bottom:5px;">
-              <span class="data-label">债务压力指数</span>
-              <span class="data-value" style="color:${statusColor}; font-weight:800;">${status} (${debtRatio.toFixed(1)}%)</span>
-            </div>
-            <div class="analysis-progress">
-              <div class="progress-fill" style="width:${Math.min(debtRatio,100)}%; background:${statusColor};"></div>
-            </div>
-          </div>
-
-          <div class="data-row"><span class="data-label">月总收入</span><span class="data-value">Rp ${userState.income.toLocaleString()}</span></div>
-          <div class="data-row"><span class="data-label">月总支出</span><span class="data-value">Rp ${userState.expense.toLocaleString()}</span></div>
-          <div class="data-row" style="border-bottom:none;"><span class="data-label">月总债务</span><span class="data-value">Rp ${userState.loan.toLocaleString()}</span></div>
-
-          <div style="margin-top:15px; padding:12px; background:#F8F9FA; border-radius:8px; border-left:4px solid ${statusColor}">
-            <p style="font-size:12px; color:#555; line-height:1.5">
-              ${status === '危险'
-                ? '压力过大！建议立即削减非必要支出，并优先处理高成本债务。'
-                : (status === '警示'
-                  ? '压力偏高，建议制定还款优先级，并保留必要现金缓冲。'
-                  : '财务状况不错，建议建立 3-6 个月的现金缓冲池，并持续跟踪支出结构。')}
-              <br>（支出占比：${expenseRatio.toFixed(1)}%）
-            </p>
-          </div>
-        </div>
-      `);
+      appendReport(reportInnerHTML);
     }, 900);
   }
 
@@ -1008,4 +1166,3 @@ function shortfallLimit() {
 </script>
 </body>
 </html>
-
